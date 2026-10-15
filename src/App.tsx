@@ -9,6 +9,7 @@ function App() {
   const [hasScanned, setHasScanned] = useState(false);
   const [selectedVuln, setSelectedVuln] = useState<Vulnerability | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -47,7 +48,6 @@ function App() {
     setHasScanned(false);
     setSelectedVuln(null);
 
-    // Simulate scanning delay for UX
     setTimeout(() => {
       const results = analyzeCode(code, filename);
       setVulnerabilities(results);
@@ -63,11 +63,14 @@ function App() {
     setHasScanned(false);
     setSelectedVuln(null);
     setFilterSeverity('all');
+    setFilterCategory('all');
   }, []);
 
-  const filteredVulnerabilities = filterSeverity === 'all'
-    ? vulnerabilities
-    : vulnerabilities.filter(v => v.severity === filterSeverity);
+  const filteredVulnerabilities = vulnerabilities.filter(v => {
+    if (filterSeverity !== 'all' && v.severity !== filterSeverity) return false;
+    if (filterCategory !== 'all' && v.category !== filterCategory) return false;
+    return true;
+  });
 
   const severityCounts = {
     critical: vulnerabilities.filter(v => v.severity === 'critical').length,
@@ -77,17 +80,122 @@ function App() {
     info: vulnerabilities.filter(v => v.severity === 'info').length,
   };
 
+  const categories = [...new Set(vulnerabilities.map(v => v.category))];
+  const evasionTechniques = vulnerabilities.filter(v => v.evasionTechnique);
+
   const overallRisk = severityCounts.critical > 0 ? 'КРИТИЧЕСКИЙ'
     : severityCounts.high > 0 ? 'ВЫСОКИЙ'
     : severityCounts.medium > 0 ? 'СРЕДНИЙ'
     : severityCounts.low > 0 ? 'НИЗКИЙ'
     : 'БЕЗОПАСНЫЙ';
 
-  const riskColor = severityCounts.critical > 0 ? 'text-red-600'
-    : severityCounts.high > 0 ? 'text-orange-600'
-    : severityCounts.medium > 0 ? 'text-yellow-600'
-    : severityCounts.low > 0 ? 'text-blue-600'
-    : 'text-green-600';
+  const riskColor = severityCounts.critical > 0 ? 'text-red-500'
+    : severityCounts.high > 0 ? 'text-orange-500'
+    : severityCounts.medium > 0 ? 'text-yellow-500'
+    : severityCounts.low > 0 ? 'text-blue-500'
+    : 'text-emerald-500';
+
+  const loadEvasionExample = () => {
+    setCode(`// ==========================================
+// ПРИМЕР: Попытка обойти сканер уязвимостей
+// ==========================================
+
+// --- 1. Обход eval() ---
+const userInput = getUserInput();
+
+// Попытка 1: indirect eval
+(0, eval)(userInput);
+
+// Попытка 2: bracket notation
+window["ev" + "al"](userInput);
+
+// Попытка 3: Function constructor
+const Fn = Function;
+new Fn(userInput)();
+
+// Попытка 4: setTimeout со строкой
+setTimeout("processData(" + userInput + ")", 0);
+
+// Попытка 5: Unicode escape
+const fn = "\\x65\\x76\\x61\\x6c";
+window[fn](userInput);
+
+// --- 2. Обход XSS ---
+const html = getUntrustedContent();
+
+// Попытка 1: insertAdjacentHTML вместо innerHTML
+element.insertAdjacentHTML("beforeend", html);
+
+// Попытка 2: createContextualFragment
+const range = document.createRange();
+const frag = range.createContextualFragment(html);
+
+// Попытка 3: outerHTML
+element.outerHTML = html;
+
+// Попытка 4: обфусцированный document.write
+const w = "wr" + "ite";
+document[w](html);
+
+// --- 3. Обход SQL-инъекций ---
+const userId = req.query.id;
+
+// Попытка 1: template literal
+const q1 = \`SELECT * FROM users WHERE id = \${userId}\`;
+
+// Попытка 2: Array.join
+const parts = ["SELECT * FROM users WHERE id =", userId];
+const q2 = parts.join(" ");
+
+// Попытка 3: String.concat
+const q3 = "SELECT * FROM users WHERE id = ".concat(userId);
+
+// Попытка 4: String.replace
+const q4 = "SELECT * FROM users WHERE id = {{ID}}".replace("{{ID}}", userId);
+
+// --- 4. Обход хардкода секретов ---
+
+// Попытка 1: Base64
+const secret = atob("c3VwZXJfc2VjcmV0X3Bhc3N3b3Jk");
+
+// Попытка 2: разбиение на части
+const p1 = "sup";
+const p2 = "er_";
+const p3 = "secret";
+const password = p1 + p2 + p3;
+
+// Попытка 3: String.fromCharCode
+const apiKey = String.fromCharCode(115, 107, 45, 49, 50, 51, 52, 53, 54, 55);
+
+// Попытка 4: fallback пароль
+const dbPass = process.env.DB_PASS || "default_password_123";
+
+// Попытка 5: XOR encoding
+const key = [83, 101, 99, 114, 101, 116];
+const decoded = key.map(c => String.fromCharCode(c ^ 0)).join("");
+
+// --- 5. Обход Command Injection ---
+const { exec } = require("child_process");
+exec("ls " + userInput);
+
+const { spawn } = require("child_process");
+spawn("sh", ["-c", userInput], { shell: true });
+
+// --- 6. Обход CORS ---
+res.setHeader("Access-Control-Allow-Origin", "*");
+
+// --- 7. Обход SSRF ---
+const target = "http://" + userInput + "/admin";
+fetch(target);
+
+const url2 = \`https://\${userInput}/internal\`;
+fetch(url2);
+
+// --- 8. Высокоэнтропийная строка (закодированный ключ) ---
+const hiddenKey = "aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldCBrZXk=";
+const decoded2 = atob(hiddenKey);`);
+    setFilename('evasion-attempt.js');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -100,14 +208,16 @@ function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                VulnScanner
+                VulnScanner v2.0
               </h1>
-              <p className="text-xs text-slate-400">Анализ уязвимостей кода</p>
+              <p className="text-xs text-slate-400">Анализ уязвимостей + обнаружение обходов</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <span className="hidden sm:inline">Статический анализ безопасности</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="hidden sm:flex items-center gap-1.5 text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Anti-Evasion Engine
+            </span>
           </div>
         </div>
       </header>
@@ -128,7 +238,6 @@ function App() {
               )}
             </div>
 
-            {/* Drop Zone */}
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -137,7 +246,7 @@ function App() {
               <textarea
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder={`Вставьте код для анализа или перетащите файл сюда...\n\nПоддерживаемые языки:\n• JavaScript / TypeScript\n• Python\n• PHP\n• Java\n• И другие`}
+                placeholder={`Вставьте код для анализа или перетащите файл сюда...\n\nСканер v2.0 обнаруживает:\n• Прямые уязвимости (eval, innerHTML, SQL...)\n• Техники обхода (обфускация, indirect eval...)\n• Закодированные секреты (Base64, XOR, char codes)\n• Высокоэнтропийные строки`}
                 className="w-full h-80 bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-sm font-mono text-slate-300 placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
                 spellCheck={false}
               />
@@ -146,7 +255,6 @@ function App() {
               </div>
             </div>
 
-            {/* File Upload */}
             <div className="flex items-center gap-3">
               <label className="flex-1 cursor-pointer">
                 <div className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 border border-slate-700 border-dashed rounded-xl hover:border-emerald-500/50 hover:bg-slate-800 transition-all text-sm text-slate-400 hover:text-emerald-400">
@@ -212,7 +320,7 @@ function App() {
                   <div className="absolute inset-0 w-20 h-20 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
                   <div className="absolute inset-0 flex items-center justify-center text-2xl">🛡️</div>
                 </div>
-                <p className="animate-pulse">Анализ кода на уязвимости...</p>
+                <p className="animate-pulse">Анализ кода и обнаружение обходов...</p>
               </div>
             )}
 
@@ -231,11 +339,30 @@ function App() {
                         : severityCounts.high > 0 ? 'bg-orange-500 w-3/4'
                         : severityCounts.medium > 0 ? 'bg-yellow-500 w-1/2'
                         : severityCounts.low > 0 ? 'bg-blue-500 w-1/4'
-                        : 'bg-green-500 w-8'
+                        : 'bg-emerald-500 w-8'
                       }`}
                     ></div>
                   </div>
                 </div>
+
+                {/* Evasion Techniques Detected */}
+                {evasionTechniques.length > 0 && (
+                  <div className="bg-red-500/5 border border-red-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🎭</span>
+                      <span className="text-sm font-semibold text-red-400">
+                        Обнаружено {evasionTechniques.length} техник обхода!
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...new Set(evasionTechniques.map(v => v.evasionTechnique))].map((tech, i) => (
+                        <span key={i} className="text-[10px] bg-red-500/10 text-red-300 border border-red-500/20 px-2 py-0.5 rounded-full">
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Severity Counts */}
                 <div className="grid grid-cols-5 gap-2">
@@ -258,19 +385,47 @@ function App() {
                   ))}
                 </div>
 
+                {/* Category Filter */}
+                {categories.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setFilterCategory('all')}
+                      className={`text-xs px-2.5 py-1 rounded-full transition-all ${
+                        filterCategory === 'all'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                      }`}
+                    >
+                      Все ({vulnerabilities.length})
+                    </button>
+                    {categories.map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setFilterCategory(filterCategory === cat ? 'all' : cat)}
+                        className={`text-xs px-2.5 py-1 rounded-full transition-all ${
+                          filterCategory === cat
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        {cat} ({vulnerabilities.filter(v => v.category === cat).length})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Vulnerability List */}
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
                   <div className="p-3 border-b border-slate-700 flex items-center justify-between">
                     <span className="text-sm text-slate-400">
-                      {filterSeverity === 'all' ? 'Все уязвимости' : `Фильтр: ${filterSeverity}`}
-                      {filteredVulnerabilities.length > 0 && ` (${filteredVulnerabilities.length})`}
+                      {filteredVulnerabilities.length} из {vulnerabilities.length} уязвимостей
                     </span>
-                    {filterSeverity !== 'all' && (
+                    {(filterSeverity !== 'all' || filterCategory !== 'all') && (
                       <button
-                        onClick={() => setFilterSeverity('all')}
+                        onClick={() => { setFilterSeverity('all'); setFilterCategory('all'); }}
                         className="text-xs text-emerald-400 hover:text-emerald-300"
                       >
-                        Сбросить
+                        Сбросить фильтры
                       </button>
                     )}
                   </div>
@@ -283,7 +438,7 @@ function App() {
                             <p>Уязвимостей не обнаружено!</p>
                           </div>
                         ) : (
-                          <p>Нет уязвимостей с выбранным уровнем</p>
+                          <p>Нет уязвимостей с выбранными фильтрами</p>
                         )}
                       </div>
                     ) : (
@@ -297,12 +452,17 @@ function App() {
                         >
                           <span className="text-lg mt-0.5">{getSeverityIcon(vuln.severity)}</span>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSeverityBadge(vuln.severity)}`}>
                                 {vuln.severity.toUpperCase()}
                               </span>
                               {vuln.line && (
                                 <span className="text-[10px] text-slate-500">Строка {vuln.line}</span>
+                              )}
+                              {vuln.evasionTechnique && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  🎭 обход
+                                </span>
                               )}
                             </div>
                             <p className="text-sm text-slate-300 truncate">{vuln.title}</p>
@@ -319,19 +479,24 @@ function App() {
 
         {/* Detail Panel */}
         {selectedVuln && hasScanned && (
-          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 mb-8 animate-in">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{getSeverityIcon(selectedVuln.severity)}</span>
                 <div>
                   <h3 className="text-lg font-semibold text-white">{selectedVuln.title}</h3>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${getSeverityBadge(selectedVuln.severity)}`}>
                       {selectedVuln.severity.toUpperCase()}
                     </span>
                     <span className="text-xs text-slate-500">{selectedVuln.category}</span>
                     {selectedVuln.line && (
                       <span className="text-xs text-slate-500">• Строка {selectedVuln.line}</span>
+                    )}
+                    {selectedVuln.evasionTechnique && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        🎭 {selectedVuln.evasionTechnique}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -364,6 +529,15 @@ function App() {
                 <p className="text-sm text-slate-300 bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
                   {selectedVuln.recommendation}
                 </p>
+                {selectedVuln.evasionTechnique && (
+                  <div className="mt-3">
+                    <h4 className="text-sm font-medium text-purple-400 mb-1">🎭 Техника обхода</h4>
+                    <p className="text-sm text-slate-300 bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
+                      Эта уязвимость использует технику обхода: <strong>{selectedVuln.evasionTechnique}</strong>.
+                      Сканер v2.0 успешно её обнаружил благодаря расширенным правилам и эвристическому анализу.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -376,22 +550,25 @@ function App() {
               <div className="text-2xl mb-3">🔍</div>
               <h3 className="font-semibold text-slate-200 mb-2">Что проверяем</h3>
               <ul className="text-sm text-slate-400 space-y-1">
-                <li>• SQL-инъекции</li>
-                <li>• XSS-уязвимости</li>
-                <li>• Хардкод секретов</li>
-                <li>• Инъекции команд</li>
-                <li>• Слабая криптография</li>
+                <li>• SQL-инъекции (включая template literals)</li>
+                <li>• XSS (innerHTML, insertAdjacentHTML...)</li>
+                <li>• eval() и все его альтернативы</li>
+                <li>• Хардкод секретов (Base64, XOR, char codes)</li>
+                <li>• Командные инъекции</li>
+                <li>• SSRF, Path Traversal, CORS</li>
               </ul>
             </div>
             <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-              <div className="text-2xl mb-3">📋</div>
-              <h3 className="font-semibold text-slate-200 mb-2">Поддерживаемые языки</h3>
+              <div className="text-2xl mb-3">🎭</div>
+              <h3 className="font-semibold text-slate-200 mb-2">Обнаружение обходов</h3>
               <ul className="text-sm text-slate-400 space-y-1">
-                <li>• JavaScript / TypeScript</li>
-                <li>• Python</li>
-                <li>• PHP / Java</li>
-                <li>• Go / Rust / C#</li>
-                <li>• HTML / SQL / Shell</li>
+                <li>• Indirect eval: (0, eval)()</li>
+                <li>• Bracket notation: window["eval"]</li>
+                <li>• String concat: "ev"+"al"</li>
+                <li>• Unicode escapes: \x65\x76...</li>
+                <li>• Function constructor</li>
+                <li>• Анализ энтропии строк</li>
+                <li>• Паттерны обфускации</li>
               </ul>
             </div>
             <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
@@ -401,25 +578,29 @@ function App() {
                 <li>Вставьте код или загрузите файл</li>
                 <li>Нажмите «Сканировать»</li>
                 <li>Изучите найденные уязвимости</li>
-                <li>Прочитайте рекомендации</li>
-                <li>Исправьте проблемы</li>
+                <li>Обратите внимание на техники обхода 🎭</li>
+                <li>Исправьте все проблемы</li>
               </ol>
             </div>
           </div>
         )}
 
-        {/* Sample Code Button */}
+        {/* Sample Code Buttons */}
         {!hasScanned && !code && (
-          <div className="text-center mt-8">
+          <div className="flex flex-wrap justify-center gap-3 mt-8">
+            <button
+              onClick={loadEvasionExample}
+              className="px-6 py-3 bg-purple-500/10 border border-purple-500/30 rounded-xl hover:bg-purple-500/20 transition-all text-sm text-purple-300 hover:text-purple-200 inline-flex items-center gap-2"
+            >
+              <span>🎭</span> Загрузить пример с обходами
+            </button>
             <button
               onClick={() => {
-                setCode(`// Пример уязвимого кода для демонстрации
+                setCode(`// Простой уязвимый код
 const express = require('express');
 const app = express();
-const mysql = require('mysql');
 
 const DB_PASSWORD = "super_secret_123";
-const API_KEY = "sk-1234567890abcdef1234567890abcdef";
 
 app.get('/user', (req, res) => {
   const query = "SELECT * FROM users WHERE id = " + req.query.id;
@@ -428,28 +609,15 @@ app.get('/user', (req, res) => {
   });
 });
 
-app.post('/search', (req, res) => {
-  const userInput = req.body.query;
-  document.write("<h1>Results for: " + userInput + "</h1>");
-  
-  const hash = md5(userInput);
-  const randomToken = Math.random().toString(36);
-  
-  eval("processQuery(" + userInput + ")");
-  
-  fetch(req.body.url);
-  
-  res.json({ data: results });
-});
-
-app.listen(3000, () => {
-  console.log("Server running with DEBUG = true");
+app.post('/render', (req, res) => {
+  document.write("<h1>" + req.body.title + "</h1>");
+  eval(req.body.code);
 });`);
-                setFilename('example-vulnerable.js');
+                setFilename('simple-vulnerable.js');
               }}
               className="px-6 py-3 bg-slate-800 border border-slate-700 rounded-xl hover:bg-slate-700 hover:border-emerald-500/50 transition-all text-sm text-slate-400 hover:text-emerald-400 inline-flex items-center gap-2"
             >
-              <span>🧪</span> Загрузить пример уязвимого кода
+              <span>🧪</span> Простой пример уязвимостей
             </button>
           </div>
         )}
@@ -458,9 +626,9 @@ app.listen(3000, () => {
       {/* Footer */}
       <footer className="border-t border-slate-700/50 mt-16 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
-          <p>VulnScanner — инструмент статического анализа безопасности кода</p>
+          <p>VulnScanner v2.0 — инструмент статического анализа безопасности с обнаружением обходов</p>
           <p className="mt-1 text-xs text-slate-600">
-            ⚠️ Это инструмент для образовательных целей. Для полного аудита безопасности используйте профессиональные решения.
+            ⚠️ Это инструмент для образовательных целей. Для полного аудита безопасности используйте профессиональные решения (Snyk, SonarQube, Checkmarx).
           </p>
         </div>
       </footer>
